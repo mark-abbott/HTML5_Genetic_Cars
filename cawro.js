@@ -40,10 +40,10 @@ var cw_graphTop = new Array();
 var cw_graphElite = new Array();
 var cw_graphAverage = new Array();
 
-var gen_champions = 1;
+var gen_champions = 3;
 var gen_parentality = 0.2;
-var gen_mutation = 0.05;
-var mutation_range = 1;
+var gen_mutation = 0.5;
+var mutation_range = 0.10;
 var gen_counter = 0;
 var nAttributes = 14; // change this when genome changes
 
@@ -323,7 +323,7 @@ function cw_createFloor() {
   cw_floorTiles = new Array();
   Math.seedrandom(floorseed);
   for(var k = 0; k < maxFloorTiles; k++) {
-    last_tile = cw_createFloorTile(tile_position, (Math.random()*3 - 1.5) * 1.5*k/maxFloorTiles);
+      last_tile = cw_createFloorTile(tile_position, (Math.random()*3 - 1.5) * 1.5*difficulty(k,maxFloorTiles));
     cw_floorTiles.push(last_tile);
     last_fixture = last_tile.GetFixtureList();
     last_world_coords = last_tile.GetWorldPoint(last_fixture.GetShape().m_vertices[3]);
@@ -332,6 +332,50 @@ function cw_createFloor() {
 }
 
 
+function difficulty(i,max)
+{
+    var difficulty; // factor in the range 0-1.
+
+    /*
+      Store the points of the difficulty envelope. 
+      The first value in each pair in the normalized (0-1) horizontal position, 
+      and the second is the normalized difficulty at that point.
+      Values in between points will be interpolated.
+
+      NB: With a final difficulty of 0.7, we evolved cars that could 
+      make it all the way to the end of the track.
+    */
+    var envelope = [ 
+  	    // Start at 0 for a flat world.
+		    [0,0], 
+		    // Stay there for a bit.
+		    [0.05, 0.0], 
+		    // Quickly ramp up to moderate.
+		    [0.2, 0.4],
+		    // Slowly get more challenging over the bulk of the course.
+		    [0.8, 0.6],
+		    // Finally hit a wall.
+		    [1.0, 0.8]
+		     ];
+
+    for ( var i_env = 0; i_env < envelope.length-1 ; i_env++ )
+	{
+	    var e_min = envelope[i_env];
+	    var e_max = envelope[i_env+1];
+
+	    if ( i < e_max[0]*max )
+		{
+		    difficulty = rescale(i, e_min[0]*max, e_max[0]*max, e_min[1], e_max[1]);
+		    return(difficulty);
+		}
+	}
+    return(1);
+}
+
+function rescale(from,oldmin,oldmax,newmin,newmax)
+{
+    return ( newmin + (newmax-newmin)*(from-oldmin)/(oldmax-oldmin) );
+}
 
 function cw_createFloorTile(position, angle) {
   body_def = new b2BodyDef();
@@ -962,6 +1006,8 @@ function cw_newRound() {
 //   }
 //   // world = new b2World(gravity, doSleep);
 //   cw_createFloor();
+    if ( document.getElementById("autonewworld").checked )
+	cw_resetWorld(false);
   cw_nextGeneration();
   ghost_reset_ghost(ghost);
   camera_x = camera_y = 0;
@@ -1016,24 +1062,34 @@ function cw_resetPopulation() {
   cw_generationZero();
 }
 
-function cw_resetWorld() {
-  doDraw = true;
+function cw_resetWorld(is_manual) {
+    doDraw = true;
   cw_stopSimulation();
   for (b = world.m_bodyList; b; b = b.m_next) {
     world.DestroyBody(b);
   }
-  floorseed = document.getElementById("newseed").value;
+
+  if (is_manual)
+      floorseed = document.getElementById("newseed").value;
+  else
+      {
+	  var d = new Date();
+	  floorseed = d.getTime();
+      }
+
   Math.seedrandom(floorseed);
   cw_createFloor();
   cw_drawMiniMap();
   Math.seedrandom();
-  cw_resetPopulation();
+  // Don't reset the population, but do reset the ghost.
+  //cw_resetPopulation();
+  ghost = ghost_create_ghost();
   cw_startSimulation();
 }
 
 function cw_confirmResetWorld() {
   if(confirm('Really reset world?')) {
-    cw_resetWorld();
+    cw_resetWorld(true);
   } else {
     return false;
   }
